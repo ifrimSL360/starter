@@ -1,5 +1,6 @@
 package interview.executor;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,9 +15,8 @@ import java.util.UUID;
 /**
  * HTTP seam of the refund API.
  *
- * <p>The status codes in this skeleton are placeholders: {@code 202} is only
- * correct for a newly created operation. See the HTTP contract in README.md for
- * the codes that replay, conflict, and missing operations require.
+ * <p>The customer header is optional to Spring and checked by the service, so
+ * a missing and a blank header fail the same rule in one place.
  */
 @RestController
 @RequestMapping("/v1/refunds")
@@ -29,16 +29,38 @@ public class RefundController {
 
     @PostMapping
     public ResponseEntity<RefundResponse> submit(
-            @RequestHeader("X-Customer-Id") String customerId,
-            @RequestBody RefundRequest request) {
-        return ResponseEntity.accepted()
-                .body(service.submit(customerId, request));
+            @RequestHeader(value = "X-Customer-Id", required = false) String customerId,
+            @RequestBody(required = false) RefundRequest request) {
+        RefundService.SubmitResult result = service.submit(customerId, request);
+        return ResponseEntity.status(statusOf(result.outcome())).body(result.response());
     }
 
+    /**
+     * The path variable is a string rather than a UUID so that an unparseable
+     * value is answered like any other unknown operation. Letting Spring bind it
+     * would return 400 and tell a caller that its guess was at least well formed.
+     */
     @GetMapping("/{operationId}")
     public ResponseEntity<RefundResponse> get(
-            @RequestHeader("X-Customer-Id") String customerId,
-            @PathVariable UUID operationId) {
-        return ResponseEntity.ok(service.get(operationId, customerId));
+            @RequestHeader(value = "X-Customer-Id", required = false) String customerId,
+            @PathVariable String operationId) {
+        return ResponseEntity.ok(service.get(parse(operationId), customerId)
+                .orElseThrow(OperationNotFoundException::new));
+    }
+
+    private static HttpStatus statusOf(RefundService.Outcome outcome) {
+        return switch (outcome) {
+            case CREATED -> HttpStatus.ACCEPTED;
+            case REPLAYED -> HttpStatus.OK;
+            case CONFLICT -> HttpStatus.CONFLICT;
+        };
+    }
+
+    private static UUID parse(String operationId) {
+        try {
+            return UUID.fromString(operationId);
+        } catch (IllegalArgumentException malformed) {
+            throw new OperationNotFoundException();
+        }
     }
 }
