@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: refund-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/commands}
+    username: ${SPRING_DATASOURCE_USERNAME:commands}
+    password: ${SPRING_DATASOURCE_PASSWORD:commands}
+  flyway:
+    enabled: true
+  jackson:
+    default-property-inclusion: non_null
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,demo-stripe
